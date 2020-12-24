@@ -153,7 +153,7 @@ namespace OpenSage.Navigation
                 }
             }
 
-            _terrain.UpdatePassabilityTexture(_graph);
+            //_terrain.UpdatePassabilityTexture(_graph);
         }
     }
 }

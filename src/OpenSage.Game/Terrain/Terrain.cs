@@ -56,9 +56,15 @@ namespace OpenSage.Terrain
 
         private Texture _passabilityTexture;
         private Image<Rgba32> _passability;
+        private Texture _sourceTexture;
+
+        private ResourceSet _materialResourceSet;
+
+        public bool ShowPassability { get; set; }
 
         internal Terrain(MapFile mapFile, AssetLoadContext loadContext)
         {
+            ShowPassability = false;
             Map = mapFile;
 
             HeightMap = new HeightMap(mapFile.HeightMapData);
@@ -93,7 +99,8 @@ namespace OpenSage.Terrain
             {
                 MapBorderWidth = new Vector2(mapFile.HeightMapData.BorderWidth, mapFile.HeightMapData.BorderWidth) * HeightMap.HorizontalScale,
                 MapSize = new Vector2(mapFile.HeightMapData.Width, mapFile.HeightMapData.Height) * HeightMap.HorizontalScale,
-                IsMacroTextureStretched = mapFile.EnvironmentData?.IsMacroTextureStretched ?? false
+                IsMacroTextureStretched = mapFile.EnvironmentData?.IsMacroTextureStretched ?? false,
+                Passability = ShowPassability
             };
             _materialConstantsBuffer.Update(loadContext.GraphicsDevice);
 
@@ -104,7 +111,7 @@ namespace OpenSage.Terrain
             RadiusCursorDecals = AddDisposable(new RadiusCursorDecals(loadContext.AssetStore, loadContext.GraphicsDevice));
 
             var causticsTextures = BuildCausticsTextureArray(loadContext.AssetStore);
-            var materialResourceSet = AddDisposable(loadContext.ShaderResources.Terrain.CreateMaterialResourceSet(
+            _materialResourceSet = AddDisposable(loadContext.ShaderResources.Terrain.CreateMaterialResourceSet(
                 _materialConstantsBuffer.Buffer,
                 tileDataTexture,
                 cliffDetailsBuffer ?? loadContext.StandardGraphicsResources.GetNullStructuredBuffer(TerrainShaderResources.CliffInfo.Size),
@@ -123,7 +130,7 @@ namespace OpenSage.Terrain
                 loadContext.GraphicsDevice,
                 HeightMap,
                 indexBufferCache,
-                materialResourceSet,
+                _materialResourceSet,
                 RadiusCursorDecalsResourceSet);
 
             var cloudTexture = loadContext.AssetStore.Textures.GetByName(mapFile.EnvironmentData?.CloudTexture ?? "tscloudmed.dds");
@@ -487,7 +494,7 @@ namespace OpenSage.Terrain
             graphicsDevice.WaitForIdle();
         }
 
-        private unsafe Texture CreateTextureViaStaging(ImageSharpTexture texture, GraphicsDevice gd, ResourceFactory factory)
+        private Texture CreateTextureViaStaging(ImageSharpTexture texture, GraphicsDevice gd, ResourceFactory factory)
         {
             var staging = factory.CreateTexture(
                 TextureDescription.Texture2D(
@@ -498,6 +505,13 @@ namespace OpenSage.Terrain
                     PixelFormat.R8_G8_B8_A8_UNorm,
                     TextureUsage.Staging));
 
+            CopyIntoTexture(texture, gd, factory, staging);
+            
+            return staging;
+        }
+
+        private unsafe void CopyIntoTexture(ImageSharpTexture texture, GraphicsDevice gd, ResourceFactory factory, Texture target)
+        {
             var cl = gd.ResourceFactory.CreateCommandList();
             cl.Begin();
             for (uint level = 0; level < texture.MipLevels; level++)
@@ -509,7 +523,7 @@ namespace OpenSage.Terrain
                 }
                 fixed (void* pin = &MemoryMarshal.GetReference(pixelSpan))
                 {
-                    var map = gd.Map(staging, MapMode.Write, level);
+                    var map = gd.Map(target, MapMode.Write, level);
                     var rowWidth = (uint) (image.Width * 4);
                     if (rowWidth == map.RowPitch)
                     {
@@ -524,15 +538,13 @@ namespace OpenSage.Terrain
                             Unsafe.CopyBlock(dstStart, srcStart, rowWidth);
                         }
                     }
-                    gd.Unmap(staging, level);
+                    gd.Unmap(target, level);
                 }
             }
             cl.End();
 
             gd.SubmitCommands(cl);
             gd.DisposeWhenIdle(cl);
-
-            return staging;
         }
 
         public Vector3? Intersect(Ray ray)
@@ -559,12 +571,16 @@ namespace OpenSage.Terrain
             _materialConstantsBuffer.Value.CausticTextureIndex = waterSettings.IsRenderCaustics
                 ? GetCausticsTextureIndex(time)
                 : -1;
+            _materialConstantsBuffer.Value.Passability = ShowPassability;
 
             _materialConstantsBuffer.Update(_graphicsDevice);
         }
 
         internal void BuildRenderList(RenderList renderList)
         {
+            _materialConstantsBuffer.Value.Passability = ShowPassability;
+            _materialConstantsBuffer.Update(_graphicsDevice);
+
             foreach (var patch in Patches)
             {
                 patch.BuildRenderList(
@@ -576,7 +592,7 @@ namespace OpenSage.Terrain
 
         public void CreatePassabilityTexture(int width, int height)
         {
-            _passability = new Image<Rgba32>(width, height, new Rgba32(0, 255, 0, 255));
+            _passability = new Image<Rgba32>(width, height, new Rgba32(255, 0, 0, 255));
 
             _passabilityTexture = _graphicsDevice.ResourceFactory.CreateTexture(
                 TextureDescription.Texture2D(
@@ -587,13 +603,13 @@ namespace OpenSage.Terrain
                     PixelFormat.R8_G8_B8_A8_UNorm,
                     TextureUsage.Sampled));
 
-            var sourceTexture = CreateTextureViaStaging(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory);
+            _sourceTexture = CreateTextureViaStaging(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory);
 
             var commandList = _graphicsDevice.ResourceFactory.CreateCommandList();
             commandList.Begin();
 
             commandList.CopyTexture(
-                    sourceTexture,
+                    _sourceTexture,
                     0, 0, 0,
                     0,
                     0,
@@ -610,28 +626,25 @@ namespace OpenSage.Terrain
             _graphicsDevice.SubmitCommands(commandList);
             _graphicsDevice.DisposeWhenIdle(commandList);
             _graphicsDevice.WaitForIdle();
-            sourceTexture.Dispose();
         }
 
         public void UpdatePassabilityTexture(Graph graph)
         {
-            //for (var x = 0; x < _passability.Width; x++)
-            //{
-            //    for (var y = 0; y < _passability.Height; y++)
-            //    {
-            //        _passability[x, y] = /*graph.GetNode(x, y).IsPassable ? new Rgba32(0, 0, 0, 255) : */new Rgba32(255, 0, 0, 255);
-            //    }
-            //}
+            for (var x = 0; x < _passability.Width; x++)
+            {
+                for (var y = 0; y < _passability.Height; y++)
+                {
+                    _passability[x, y] = /*graph.GetNode(x, y).IsPassable ? new Rgba32(0, 0, 0, 255) : */new Rgba32(255, 0, 0, 255);
+                }
+            }
 
-            _passability = new Image<Rgba32>(_passability.Width, _passability.Height, new Rgba32(255, 0, 0, 255));
-
-            var sourceTexture = CreateTextureViaStaging(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory);
+            CopyIntoTexture(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory, _sourceTexture);
 
             var commandList = _graphicsDevice.ResourceFactory.CreateCommandList();
             commandList.Begin();
 
             commandList.CopyTexture(
-                    sourceTexture,
+                    _sourceTexture,
                     0, 0, 0,
                     0,
                     0,
@@ -648,7 +661,6 @@ namespace OpenSage.Terrain
             _graphicsDevice.SubmitCommands(commandList);
             _graphicsDevice.DisposeWhenIdle(commandList);
             _graphicsDevice.WaitForIdle();
-            sourceTexture.Dispose();
         }
 
         public void Save()

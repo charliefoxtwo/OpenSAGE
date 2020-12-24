@@ -468,6 +468,16 @@ namespace OpenSage
             _orderGeneratorSystem.BuildRenderList(renderList, camera, gameTime);
         }
 
+        internal void BuildRenderListDebug(RenderList renderList, Camera camera, in TimeInterval gameTime)
+        {
+            if (Terrain != null)
+            {
+                Terrain.ShowPassability = true;
+                Terrain.BuildRenderList(renderList);
+                Terrain.ShowPassability = false;
+            }
+        }
+
         // This is for drawing 2D elements which depend on the Scene3D, e.g tooltips and health bars.
         internal void Render(DrawingContext2D drawingContext)
         {

@@ -22,6 +22,7 @@ layout(set = 4, binding = 0) uniform TerrainMaterialConstants
     vec2 MapSize;
     bool IsMacroTextureStretched;
     int CausticTextureIndex;
+    bool Passability;
 } _TerrainMaterialConstants;
 
 layout(set = 4, binding = 1) uniform utexture2D TileData;
@@ -298,9 +299,12 @@ void main()
 
     vec3 decalColor = GetRadiusCursorDecalColor(in_WorldPosition);
 
-    out_Color = texture(sampler2D(PassabilityTexture, Sampler), in_UV);
-//    out_Color = texelFetch(PassabilityTexture, ivec2(in_WorldPosition.xy), 0);
-    return;
+    if (_TerrainMaterialConstants.Passability)
+    {
+        out_Color = vec4(texture(sampler2D(PassabilityTexture, Sampler), in_UV).r, 0, 0, 0.1);
+        //    out_Color = texelFetch(PassabilityTexture, ivec2(in_WorldPosition.xy), 0);
+        return;
+    }
 
     out_Color = vec4(
         (diffuseColor * textureColor * cloudColor * macroTextureColor) + decalColor,

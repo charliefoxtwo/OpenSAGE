@@ -93,6 +93,9 @@ namespace OpenSage.Graphics.Shaders
 
             [FieldOffset(20)]
             public int CausticTextureIndex;
+
+            [FieldOffset(24)]
+            public Bool32 Passability;
         }
 
         [StructLayout(LayoutKind.Sequential)]

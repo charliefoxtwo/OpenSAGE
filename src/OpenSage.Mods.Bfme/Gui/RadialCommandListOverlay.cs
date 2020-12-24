@@ -43,15 +43,25 @@ namespace OpenSage.Mods.Bfme.Gui
         public void Update(Player player)
         {
             _visible = false;
-            if (player.SelectedUnits.Count != 1)
+            GameObject selectedObject;
+
+            if (player.SelectedUnits.Any(x => x.ParentHorde != null))
+            {
+                selectedObject = player.SelectedUnits.Where(x => x.ParentHorde != null).First();
+                selectedObject = selectedObject.ParentHorde;
+            }
+            else if (player.SelectedUnits.Count != 1)
             {
                 _selectedObject = null;
                 return;
             }
+            else
+            {
+                selectedObject = player.SelectedUnits.First();
+            }
 
-            var selectedObject = player.SelectedUnits.First();
             if (selectedObject.Owner != player
-                || !selectedObject.Definition.KindOf.Get(ObjectKinds.Structure)
+                //|| !selectedObject.Definition.KindOf.Get(ObjectKinds.Structure)
                 || selectedObject.Definition.CommandSet == null)
             {
                 _selectedObject = null;

@@ -167,6 +167,34 @@ namespace OpenSage.Graphics.Rendering
 
             context.GraphicsDevice.SubmitCommands(_commandList);
 
+            context.Scene3D?.BuildRenderListDebug(
+                _renderList,
+                context.Scene3D.Camera,
+                context.GameTime);
+
+            BuildingRenderList?.Invoke(this, new BuildingRenderListEventArgs(
+                _renderList,
+                context.Scene3D?.Camera,
+                context.GameTime));
+
+            _commandList.Begin();
+
+            if (context.Scene3D != null)
+            {
+                _commandList.PushDebugGroup("3D Scene");
+                Render3DScene(_commandList, context.Scene3D, context);
+                _commandList.PopDebugGroup();
+            }
+            else
+            {
+                _commandList.SetFramebuffer(_intermediateFramebuffer);
+                _commandList.ClearColorTarget(0, ClearColor);
+            }
+
+            _commandList.End();
+
+            context.GraphicsDevice.SubmitCommands(_commandList);
+
             _textureCopier.Execute(
                 _intermediateTexture,
                 context.RenderTarget);

@@ -54,7 +54,8 @@ layout(std430, set = 4, binding = 3) readonly buffer TextureDetails
 layout(set = 4, binding = 4) uniform texture2DArray Textures;
 layout(set = 4, binding = 5) uniform texture2D MacroTexture;
 layout(set = 4, binding = 6) uniform texture2DArray CausticsTextures;
-layout(set = 4, binding = 7) uniform sampler Sampler;
+layout(set = 4, binding = 7) uniform texture2D PassabilityTexture;
+layout(set = 4, binding = 8) uniform sampler Sampler;
 
 MAKE_RADIUS_CURSOR_DECAL_RESOURCES(5)
 
@@ -296,6 +297,10 @@ void main()
     textureColor = DoCausticsRendering(textureColor, diffuseColor);
 
     vec3 decalColor = GetRadiusCursorDecalColor(in_WorldPosition);
+
+    out_Color = texture(sampler2D(PassabilityTexture, Sampler), in_UV);
+//    out_Color = texelFetch(PassabilityTexture, ivec2(in_WorldPosition.xy), 0);
+    return;
 
     out_Color = vec4(
         (diffuseColor * textureColor * cloudColor * macroTextureColor) + decalColor,

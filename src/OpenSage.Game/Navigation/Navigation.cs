@@ -11,10 +11,11 @@ namespace OpenSage.Navigation
     {
         private readonly Graph _graph;
         private readonly HeightMap _heightMap;
+        private readonly Terrain.Terrain _terrain;
 
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
-        public Navigation(BlendTileData tileData, HeightMap heightMap)
+        public Navigation(BlendTileData tileData, Terrain.Terrain terrain)
         {
             var width = tileData.Impassability.GetLength(0);
             var height = tileData.Impassability.GetLength(1);
@@ -29,7 +30,9 @@ namespace OpenSage.Navigation
                 }
             }
 
-            _heightMap = heightMap;
+            _terrain = terrain;
+            _heightMap = terrain.HeightMap;
+            _terrain.CreatePassabilityTexture(_graph.Width, _graph.Height);
         }
 
         private Vector2 GetNodePosition(Node node)
@@ -72,6 +75,8 @@ namespace OpenSage.Navigation
 
         public IList<Vector3> CalculatePath(Vector3 start, Vector3 end, out bool endIsPassable)
         {
+            _terrain.Save();
+
             var result = new List<Vector3>();
             endIsPassable = true;
             var startNode = GetClosestNode(start);
@@ -135,11 +140,11 @@ namespace OpenSage.Navigation
 
             var area = gameObject.Collider.BoundingArea;
 
-            for (var x = 0; x < topRightNode.X - bottomLeftNode.X; x++)
+            for (var x = bottomLeftNode.X; x < topRightNode.X; x++)
             {
-                for (var y = 0; y < topRightNode.Y - bottomLeftNode.Y; y++)
+                for (var y = bottomLeftNode.Y; y < topRightNode.Y; y++)
                 {
-                    var node = _graph.GetNode(bottomLeftNode.X + x, bottomLeftNode.Y + y);
+                    var node = _graph.GetNode(x, y);
                     var position = GetNodePosition(node);
                     if (area.Contains(position))
                     {
@@ -147,6 +152,8 @@ namespace OpenSage.Navigation
                     }
                 }
             }
+
+            _terrain.UpdatePassabilityTexture(_graph);
         }
     }
 }

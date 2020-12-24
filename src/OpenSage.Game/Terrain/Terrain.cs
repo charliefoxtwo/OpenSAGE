@@ -14,6 +14,7 @@ using OpenSage.Graphics.Rendering;
 using OpenSage.Graphics.Rendering.Water;
 using OpenSage.Graphics.Shaders;
 using OpenSage.Mathematics;
+using OpenSage.Navigation;
 using OpenSage.Utilities;
 using OpenSage.Utilities.Extensions;
 using SixLabors.ImageSharp;
@@ -52,6 +53,9 @@ namespace OpenSage.Terrain
         internal readonly RadiusCursorDecals RadiusCursorDecals;
 
         internal readonly ResourceSet RadiusCursorDecalsResourceSet;
+
+        private Texture _passabilityTexture;
+        private Image<Rgba32> _passability;
 
         internal Terrain(MapFile mapFile, AssetLoadContext loadContext)
         {
@@ -95,9 +99,11 @@ namespace OpenSage.Terrain
 
             var macroTexture = loadContext.AssetStore.Textures.GetByName(mapFile.EnvironmentData?.MacroTexture ?? "tsnoiseurb.dds");
 
+            CreatePassabilityTexture(450, 390);
+
             RadiusCursorDecals = AddDisposable(new RadiusCursorDecals(loadContext.AssetStore, loadContext.GraphicsDevice));
 
-            var casuticsTextures = BuildCausticsTextureArray(loadContext.AssetStore);
+            var causticsTextures = BuildCausticsTextureArray(loadContext.AssetStore);
             var materialResourceSet = AddDisposable(loadContext.ShaderResources.Terrain.CreateMaterialResourceSet(
                 _materialConstantsBuffer.Buffer,
                 tileDataTexture,
@@ -105,7 +111,8 @@ namespace OpenSage.Terrain
                 textureDetailsBuffer,
                 textureArray,
                 macroTexture,
-                casuticsTextures));
+                causticsTextures,
+                _passabilityTexture));
 
             RadiusCursorDecalsResourceSet = AddDisposable(loadContext.ShaderResources.RadiusCursor.CreateRadiusCursorDecalsResourceSet(
                 RadiusCursorDecals.TextureArray,
@@ -565,6 +572,88 @@ namespace OpenSage.Terrain
                     _shaderSet,
                     _pipeline);
             }
+        }
+
+        public void CreatePassabilityTexture(int width, int height)
+        {
+            _passability = new Image<Rgba32>(width, height, new Rgba32(0, 255, 0, 255));
+
+            _passabilityTexture = _graphicsDevice.ResourceFactory.CreateTexture(
+                TextureDescription.Texture2D(
+                    (uint)width,
+                    (uint)height,
+                    1,
+                    1,
+                    PixelFormat.R8_G8_B8_A8_UNorm,
+                    TextureUsage.Sampled));
+
+            var sourceTexture = CreateTextureViaStaging(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory);
+
+            var commandList = _graphicsDevice.ResourceFactory.CreateCommandList();
+            commandList.Begin();
+
+            commandList.CopyTexture(
+                    sourceTexture,
+                    0, 0, 0,
+                    0,
+                    0,
+                    _passabilityTexture,
+                    0, 0, 0,
+                    0,
+                    0,
+                    (uint) _passability.Width,
+                    (uint) _passability.Height,
+                    1,
+                    1);
+
+            commandList.End();
+            _graphicsDevice.SubmitCommands(commandList);
+            _graphicsDevice.DisposeWhenIdle(commandList);
+            _graphicsDevice.WaitForIdle();
+            sourceTexture.Dispose();
+        }
+
+        public void UpdatePassabilityTexture(Graph graph)
+        {
+            //for (var x = 0; x < _passability.Width; x++)
+            //{
+            //    for (var y = 0; y < _passability.Height; y++)
+            //    {
+            //        _passability[x, y] = /*graph.GetNode(x, y).IsPassable ? new Rgba32(0, 0, 0, 255) : */new Rgba32(255, 0, 0, 255);
+            //    }
+            //}
+
+            _passability = new Image<Rgba32>(_passability.Width, _passability.Height, new Rgba32(255, 0, 0, 255));
+
+            var sourceTexture = CreateTextureViaStaging(new ImageSharpTexture(_passability), _graphicsDevice, _graphicsDevice.ResourceFactory);
+
+            var commandList = _graphicsDevice.ResourceFactory.CreateCommandList();
+            commandList.Begin();
+
+            commandList.CopyTexture(
+                    sourceTexture,
+                    0, 0, 0,
+                    0,
+                    0,
+                    _passabilityTexture,
+                    0, 0, 0,
+                    0,
+                    0,
+                    (uint) _passability.Width,
+                    (uint) _passability.Height,
+                    1,
+                    1);
+
+            commandList.End();
+            _graphicsDevice.SubmitCommands(commandList);
+            _graphicsDevice.DisposeWhenIdle(commandList);
+            _graphicsDevice.WaitForIdle();
+            sourceTexture.Dispose();
+        }
+
+        public void Save()
+        {
+            _passability.Save(@"C:\Users\micha\Desktop\passability.png");
         }
     }
 }

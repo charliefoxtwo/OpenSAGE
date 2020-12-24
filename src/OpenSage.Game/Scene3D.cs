@@ -297,7 +297,7 @@ namespace OpenSage
                 MapFile = mapFile;
                 Terrain = AddDisposable(new Terrain.Terrain(mapFile, game.AssetStore.LoadContext));
                 WaterAreas = AddDisposable(new WaterAreaCollection(mapFile.PolygonTriggers, mapFile.StandingWaterAreas, mapFile.StandingWaveAreas, game.AssetStore.LoadContext));
-                Navigation = new Navigation.Navigation(mapFile.BlendTileData, Terrain.HeightMap);
+                Navigation = new Navigation.Navigation(mapFile.BlendTileData, Terrain);
             }
 
             if (mapPath != null)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using OpenSage.Content;
 using OpenSage.Core;
@@ -340,14 +341,71 @@ namespace OpenSage.Mods.Generals.Gui
 
             const int PRODUCTION_QUEUE_SIZE = 9;
 
+            // TODO: if a button is enabled/unselected for any unit, it should be enabled for all units
+            //  if multiple dozers are selected, only the mine clearing option should be enabled
+            //  if two infantry units of different factions are selected, the capture option isn't shown (just attackmove, defend, stop)
+            private CommandSet MergeUnitCommands(IReadOnlyCollection<GameObject> units)
+            {
+                var firstUnitButtons = units.First(u => u.Definition.CommandSet != null).Definition.CommandSet.Value.Buttons;
+                var merged = new Dictionary<int, LazyAssetReference<CommandButton>>(firstUnitButtons);
+
+                // per testing, if any unit has an attack ability, then the AttackMove button should always be available
+                var forceAttackMove = false;
+                var attackMoveButtonIndex = -1;
+                LazyAssetReference<CommandButton> attackMoveButton = null;
+
+                foreach (var unit in units.Where(u => u.Definition.CommandSet != null))
+                {
+                    if (!forceAttackMove && unit.CanAttack)
+                    {
+                        var foundButton =
+                            unit.Definition.CommandSet.Value.Buttons.FirstOrDefault(kvp =>
+                                kvp.Value.Value.Command == CommandType.AttackMove);
+
+                        if (foundButton.Key == 0) continue;
+                        forceAttackMove = true;
+                        attackMoveButtonIndex = foundButton.Key;
+                        attackMoveButton = foundButton.Value;
+                    }
+
+                    var buttons = unit.Definition.CommandSet.Value.Buttons;
+                    foreach (var (index, button) in merged)
+                    {
+                        // checking name equality should handle merges correctly
+                        if (!buttons.TryGetValue(index, out var existing) || existing.Value.FullName != button.Value.FullName)
+                        {
+                            merged.Remove(index);
+                        }
+                    }
+                }
+
+                var newCommandSet = new CommandSet();
+                foreach (var (index, button) in merged)
+                {
+                    newCommandSet.Buttons.Add(index, button);
+                }
+
+                if (forceAttackMove)
+                {
+                    newCommandSet.Buttons[attackMoveButtonIndex] = attackMoveButton;
+                }
+
+                return newCommandSet;
+            }
+
+            /// <summary>
+            /// If a button is enabled/unselected for any unit, it should be enabled for all units.
+            /// The right side of the command bar should show the contents for the earliest-constructed-unit selected.
+            /// </summary>
+            /// <param name="player"></param>
+            /// <param name="controlBar"></param>
             public override void Update(Player player, GeneralsControlBar controlBar)
             {
-                // TODO: Handle multiple selection.
                 var unit = player.SelectedUnits.First();
 
                 if (unit.Definition.CommandSet == null) return;
 
-                var commandSet = unit.Definition.CommandSet.Value;
+                var commandSet = MergeUnitCommands(player.SelectedUnits);
 
                 // TODO: Only do this when command set changes.
                 ApplyCommandSet(unit, controlBar, commandSet);

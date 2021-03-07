@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -243,7 +243,9 @@ namespace OpenSage.Logic.Object
 
         internal Weapon CurrentWeapon => _weaponSet.CurrentWeapon;
 
-        private TimeSpan ConstructionStart { get; set; }
+        private TimeSpan? ConstructionStart { get; set; }
+
+        private TimeSpan _existingConstructionProgress;
 
         public TimeSpan? LifeTime { get; set; }
 
@@ -670,7 +672,11 @@ namespace OpenSage.Logic.Object
             // Check if the unit is being constructed
             if (IsBeingConstructed())
             {
-                var passed = gameTime.TotalTime - ConstructionStart;
+                var passed = _existingConstructionProgress;
+                if (ConstructionStart.HasValue)
+                {
+                    passed += gameTime.TotalTime - ConstructionStart.Value;
+                }
                 BuildProgress = Math.Clamp((float) passed.TotalSeconds / Definition.BuildTime, 0.0f, 1.0f);
 
                 if (BuildProgress >= 1.0f)
@@ -716,16 +722,42 @@ namespace OpenSage.Logic.Object
                 : _upgrades.Contains(upgrade.Name);
         }
 
-        internal void StartConstruction(in TimeInterval gameTime)
+        /// <summary>
+        /// Called when a foundation has been placed, but construction has not yet begun
+        /// </summary>
+        internal void PrepareConstruction()
         {
             if (IsStructure)
             {
-                ModelConditionFlags.SetAll(false);
+                ClearModelConditionFlags();
+                // TODO: investigate this, but I think this is correct
                 ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
                 ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
                 ModelConditionFlags.Set(ModelConditionFlag.PartiallyConstructed, true);
-                ConstructionStart = gameTime.TotalTime;
             }
+        }
+
+        /// <summary>
+        /// Called when construction has <i>actually</i> begun
+        /// </summary>
+        /// <param name="gameTime">game time at which construction has begun, used to track progress</param>
+        internal void Construct(in TimeInterval gameTime)
+        {
+            ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
+            ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
+            ConstructionStart = gameTime.TotalTime;
+        }
+
+        internal void PauseConstruction(in TimeInterval gameTime)
+        {
+            ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
+            ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
+            if (ConstructionStart.HasValue)
+            {
+                _existingConstructionProgress = gameTime.TotalTime - ConstructionStart.Value;
+            }
+
+            ConstructionStart = null;
         }
 
         internal void FinishConstruction()

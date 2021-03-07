@@ -77,7 +77,8 @@ namespace OpenSage.Logic.Object
 
                     if (!instant)
                     {
-                        baseObject.StartConstruction(_context.Scene3D.Game.MapTime);
+                        baseObject.PrepareConstruction();
+                        baseObject.Construct(_context.Scene3D.Game.MapTime);
                         baseObject.BuildProgress = 0.0f;
                     }
 

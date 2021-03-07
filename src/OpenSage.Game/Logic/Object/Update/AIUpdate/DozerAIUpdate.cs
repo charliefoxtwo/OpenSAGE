@@ -1,12 +1,15 @@
-﻿using System.IO;
+using System.IO;
+using System.Numerics;
 using OpenSage.Data.Ini;
 using OpenSage.FileFormats;
 using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
-    public sealed class DozerAIUpdate : AIUpdate
+    public sealed class DozerAIUpdate : AIUpdate, IBuilderAIUpdate
     {
+        private GameObject _buildTarget;
+
         internal DozerAIUpdate(GameObject gameObject, DozerAIUpdateModuleData moduleData)
             : base(gameObject, moduleData)
         {
@@ -23,6 +26,49 @@ namespace OpenSage.Logic.Object
             base.Load(reader);
 
             // TODO
+        }
+
+        public void SetBuildTarget(GameObject gameObject)
+        {
+            // note that the order here is important, as SetTargetPoint will clear any existing buildTarget
+            // TODO: target should not be directly on the building, but rather a point along the foundation perimeter
+            SetTargetPoint(gameObject.Translation);
+            _buildTarget = gameObject;
+        }
+
+        protected override void ArrivedAtDestination()
+        {
+            base.ArrivedAtDestination();
+
+            if (_buildTarget is not null)
+            {
+                _buildTarget.Construct(_buildTarget.GameContext.Scene3D.Game.MapTime);
+                GameObject.ModelConditionFlags.Set(ModelConditionFlag.ActivelyConstructing, true);
+            }
+        }
+
+        internal override void SetTargetPoint(Vector3 targetPoint)
+        {
+            base.SetTargetPoint(targetPoint);
+            GameObject.ModelConditionFlags.Set(ModelConditionFlag.ActivelyConstructing, false);
+            _buildTarget?.PauseConstruction(_buildTarget.GameContext.Scene3D.Game.MapTime);
+            ClearBuildTarget();
+        }
+
+        internal override void Update(BehaviorUpdateContext context)
+        {
+            base.Update(context);
+
+            if (_buildTarget != null && _buildTarget.BuildProgress >= 1)
+            {
+                ClearBuildTarget();
+                GameObject.ModelConditionFlags.Set(ModelConditionFlag.ActivelyConstructing, false);
+            }
+        }
+
+        private void ClearBuildTarget()
+        {
+            _buildTarget = null;
         }
     }
 

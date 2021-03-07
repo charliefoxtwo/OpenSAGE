@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
@@ -137,6 +137,8 @@ namespace OpenSage.Logic.Object
             MoveToNextWaypointOrStop();
         }
 
+        protected virtual void ArrivedAtDestination() { }
+
         internal void Stop()
         {
             GameObject.ModelConditionFlags.Set(ModelConditionFlag.Moving, false);
@@ -166,6 +168,7 @@ namespace OpenSage.Logic.Object
             }
             else
             {
+                ArrivedAtDestination();
                 Stop();
             }
         }

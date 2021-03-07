@@ -58,7 +58,10 @@ namespace OpenSage.Logic.Orders
                             var gameObject = _game.Scene3D.GameObjects.Add(objectDefinition, player);
                             gameObject.Owner = player;
                             gameObject.UpdateTransform(position, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, angle));
-                            gameObject.StartConstruction(_game.MapTime);
+                            gameObject.PrepareConstruction();
+
+                            var dozer = player.SelectedUnits.SingleOrDefault(u => u.Definition.KindOf.Get(ObjectKinds.Dozer));
+                            (dozer?.AIUpdate as IBuilderAIUpdate)?.SetBuildTarget(gameObject);
                         }
                         break;
 

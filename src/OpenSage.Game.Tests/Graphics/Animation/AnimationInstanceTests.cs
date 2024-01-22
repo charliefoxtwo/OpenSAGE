@@ -32,8 +32,12 @@ namespace OpenSage.Tests.Graphics.Animation
             }
         }
 
-        [Fact]
-        public void OnceBackwardsTest()
+        [Theory]
+        [InlineData(0.5f)]
+        [InlineData(1)]
+        [InlineData(1.5f)]
+        [InlineData(2)]
+        public void OnceBackwardsTest(float speed)
         {
             var modelBoneInstances = NewDefaultModelBoneInstances();
             var animation = NewBasicAnimationInstance();
@@ -41,15 +45,15 @@ namespace OpenSage.Tests.Graphics.Animation
             var instance = new AnimationInstance(modelBoneInstances, animation, AnimationMode.OnceBackwards,
                 AnimationFlags.StartFrameLast, null, new QuoteUnquoteRandom());
 
-            instance.Play();
+            instance.Play(speed);
             var time = TimeInterval.Zero;
-            for (var i = 4; i >= 0; i--)
+            for (float i = 4; i >= 0; i -= speed)
             {
                 instance.Update(time);
                 time = new TimeInterval(time.TotalTime + TimeSpan.FromSeconds(1),
                     TimeSpan.FromSeconds(1));
 
-                Assert.Equal(i, modelBoneInstances[0].AnimatedOffset.Translation.X);
+                Assert.Equal(i, modelBoneInstances[0].AnimatedOffset.Translation.X, new ToleranceEqualityComparer(0.001f));
             }
         }
 

@@ -30,12 +30,14 @@ namespace OpenSage.Logic.Object
         private readonly AnimationState _idleAnimationState;
 
         protected readonly List<GeneralsTransitionState> _generalsTransitionStates;
+        protected readonly Dictionary<string, Dictionary<string, GeneralsTransitionState>> _transitionStates = new();
         protected readonly List<BfmeTransitionState> _bfmeTransitionStates;
 
         private readonly Dictionary<ModelConditionState, W3dModelDrawConditionState> _cachedModelDrawConditionStates;
 
         private ModelConditionState _activeConditionState;
         protected AnimationState _activeAnimationState;
+        private string _activeTransitionKey;
 
         private W3dModelDrawConditionState _activeModelDrawConditionState;
 
@@ -79,6 +81,7 @@ namespace OpenSage.Logic.Object
             if (data.DefaultConditionState != null)
             {
                 _defaultConditionState = data.DefaultConditionState;
+                _activeTransitionKey = _defaultConditionState.TransitionKey;
             }
 
             foreach (var conditionState in data.ConditionStates)
@@ -117,6 +120,14 @@ namespace OpenSage.Logic.Object
             }
 
             _generalsTransitionStates = data.GeneralsTransitionStates;
+            foreach (var transitionState in _generalsTransitionStates)
+            {
+                if (!_transitionStates.ContainsKey(transitionState.FromTransitionKey))
+                {
+                    _transitionStates[transitionState.FromTransitionKey] = new Dictionary<string, GeneralsTransitionState>();
+                }
+                _transitionStates[transitionState.FromTransitionKey].Add(transitionState.ToTransitionKey, transitionState);
+            }
             _bfmeTransitionStates = data.BfmeTransitionStates;
         }
 
@@ -192,21 +203,31 @@ namespace OpenSage.Logic.Object
         private IConditionState FindBestFittingConditionState(IConditionState defaultState, List<IConditionState> conditionStates, BitArray<ModelConditionFlag> flags)
         {
             var bestConditionState = defaultState;
-            var bestIntersections = 0;
+            var bestScore = int.MinValue;
 
             foreach (var conditionState in conditionStates)
             {
+                // flags is the current condition
+                // conditionstate is the state we're checking for a match.
                 var numStateBits = conditionState.ConditionFlags.NumBitsSet;
-                var numIntersectionBits = conditionState.ConditionFlags.CountIntersectionBits(flags);
+                var intersections = conditionState.ConditionFlags.CountIntersectionBits(flags);
+                var score = intersections - numStateBits;
 
-                if (numIntersectionBits < bestIntersections
-                    || numStateBits > numIntersectionBits)
+                // stick with the first best match we've found
+                if (score <= bestScore || intersections == 0)
                 {
                     continue;
                 }
 
+                if (score == 0)
+                {
+                    // best case scenario
+                    bestConditionState = conditionState;
+                    break;
+                }
+
                 bestConditionState = conditionState;
-                bestIntersections = numIntersectionBits;
+                bestScore = score;
             }
 
             return bestConditionState;
@@ -226,12 +247,58 @@ namespace OpenSage.Logic.Object
             }
 
             var bestConditionState = (ModelConditionState)FindBestFittingConditionState(_defaultConditionState, _conditionStates, flags);
-            SetActiveConditionState(bestConditionState, random);
 
+            if (bestConditionState?.Model?.Value?.Name?.Equals("NBPwrPlant", StringComparison.OrdinalIgnoreCase) == true)
+            {
+
+            }
+
+            if (bestConditionState.TransitionKey is null || bestConditionState.TransitionKey == _activeTransitionKey)
+            {
+                // we don't want to change to the new condition state until we're done transitioning away from the old,
+                // yet we do want to transition immediately if the old doesn't have a model?
+                // SetActiveConditionState(bestConditionState, random);
+            }
+            else
+            {
+                // TODO: recent tyler here. No idea what this old stuff is. It's likely not important.
+                //  right now, the only thing not working is the crane doesn't disappear and the end of the animation
+                //  guessing this is because the model "none" isn't being applied after the animation finishes.
+                // the up and down transitions both have a model, so we just need to look at applying the *condition*
+                //  states after the *transition* states have completed
+
+                // crane seems to just drop straight down very quickly and leave the base. Seems like the animation isn't playing out properly?
+
+                // if the *current* transition state is null, let's just set the transition state
+                // if the current transition state equals this one, let's do nothing
+                // if the current state is not null and different, let's try to transition from the current state to the new one,
+                //  and that is the animation we'll use.
+
+                // TODO: if we transition _away from_ a state, we need to run the transition animation before showing the new model
+                //  how do we do that?
+                // if (_activeTransitionKey != bestConditionState.TransitionKey)
+                // {
+
+                    // TODO: interesting to note that pulling this outside of the if/else to always run it doesn't fix
+                    //  the animation problem but does cause additional problems with models just disappearing before
+                    //  a transition is finished.
+                    // seems like the desired state is not saved under the transitions state
+                    // can we set the transition state separately, and then process the animation state once the the transition has completed?
+                    if (_transitionStates.TryGetValue(_activeTransitionKey, out var toStates) &&
+                        toStates.TryGetValue(bestConditionState.TransitionKey, out var targetState))
+                    {
+                        _activeTransitionKey = bestConditionState.TransitionKey;
+                        bestConditionState = targetState;
+                    }
+
+                    // }
+
+            }
+            SetActiveConditionState(bestConditionState, random);
             foreach (var weaponMuzzleFlash in bestConditionState.WeaponMuzzleFlashes)
             {
                 var visible = flags.Get(ModelConditionFlag.FiringA);
-                for (var i = 0; i < _activeModelDrawConditionState.Model.ModelBoneInstances.Length; i++)
+                for (var i = 0; i < (_activeModelDrawConditionState?.Model.ModelBoneInstances.Length ?? 0); i++)
                 {
                     var bone = _activeModelDrawConditionState.Model.ModelBoneInstances[i];
                     // StartsWith is a bit awkward here, but for instance AVCommance has WeaponMuzzleFlashes = { TurretFX }, and Bones = { TURRETFX01 }
@@ -249,7 +316,8 @@ namespace OpenSage.Logic.Object
         private W3dModelDrawConditionState CreateModelDrawConditionStateInstance(ModelConditionState conditionState, Random random)
         {
             // Load model, fallback to default model.
-            var model = conditionState.Model?.Value ?? _defaultConditionState.Model?.Value;
+            // TODO: do NOT fall back to the default model - if it's empty, it's empty for a reason.
+            var model = conditionState.Model?.Value; // ?? _defaultConditionState.Model?.Value;
             var modelInstance = model?.CreateInstance(_context.AssetLoadContext) ?? null;
 
             if (modelInstance == null)
@@ -259,7 +327,7 @@ namespace OpenSage.Logic.Object
 
             // TODO: since the ModelDrawConditionStates are cached we should find a way to change the animation afterwards
             var animations = conditionState.ConditionAnimations;
-            if (!conditionState.ConditionFlags.Get(ModelConditionFlag.Moving))
+            if (conditionState.ConditionFlags?.Get(ModelConditionFlag.Moving) != true)
             {
                 animations.AddRange(conditionState.IdleAnimations);
             }
@@ -355,7 +423,8 @@ namespace OpenSage.Logic.Object
 
         internal override void SetWorldMatrix(in Matrix4x4 worldMatrix)
         {
-            if (GameObject.VerticalOffset != 0)
+            // TODO: is this change necessary?
+            if (_activeConditionState.Flags.HasFlag(AnimationFlags.AdjustHeightByConstructionPercent))
             {
                 var mat = worldMatrix * Matrix4x4.CreateTranslation(Vector3.UnitZ * GameObject.VerticalOffset);
                 _activeModelDrawConditionState?.SetWorldMatrix(mat);

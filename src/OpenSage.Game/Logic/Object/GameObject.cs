@@ -731,9 +731,10 @@ namespace OpenSage.Logic.Object
             {
                 ClearModelConditionFlags();
                 // TODO: investigate this, but I think this is correct
-                ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
+                // TODO: why does the model appear fully when activelybeingconstructed is false?
                 ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
-                ModelConditionFlags.Set(ModelConditionFlag.PartiallyConstructed, true);
+                ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, false);
+                ModelConditionFlags.Set(ModelConditionFlag.PartiallyConstructed, false);
             }
         }
 
@@ -744,14 +745,16 @@ namespace OpenSage.Logic.Object
         internal void Construct(in TimeInterval gameTime)
         {
             ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
-            ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
+            ModelConditionFlags.Set(ModelConditionFlag.PartiallyConstructed, true);
+            ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, false);
             ConstructionStart = gameTime.TotalTime;
         }
 
         internal void PauseConstruction(in TimeInterval gameTime)
         {
-            ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, true);
-            ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
+            // ModelConditionFlags.Set(ModelConditionFlag.ActivelyBeingConstructed, false);
+            // ModelConditionFlags.Set(ModelConditionFlag.PartiallyConstructed, true);
+            // ModelConditionFlags.Set(ModelConditionFlag.AwaitingConstruction, true);
             if (ConstructionStart.HasValue)
             {
                 _existingConstructionProgress = gameTime.TotalTime - ConstructionStart.Value;
@@ -763,6 +766,7 @@ namespace OpenSage.Logic.Object
         internal void FinishConstruction()
         {
             ClearModelConditionFlags();
+            // ModelConditionFlags.Set(ModelConditionFlag.ConstructionComplete, true);
             EnergyProduction += Definition.EnergyProduction;
         }
 
